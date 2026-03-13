@@ -4,9 +4,11 @@
   "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev src/server.ts",
+    "practice:dev": "ts-node-dev src/practice-server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "start:cluster": "node dist/server.js",
+    "practice:start:cluster": "node dist/practice-server.js",
     "start:noncluster": "node dist/server-single.js",
     "test": "jest",
     "test:watch": "jest --watch --coverage",

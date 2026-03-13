@@ -20,6 +20,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "benchmark.js"],
   "exclude": ["node_modules", "**/*.test.ts", "dist"]
 }
