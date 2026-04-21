@@ -1,0 +1,143 @@
+# Worker Threads Benchmark Guide
+
+## Prerequisites
+
+Server must be running before any benchmark command is executed.
+All commands assume you are in the `nodejs-performance` root directory.
+
+---
+
+## Step 1: Compile
+
+```bash
+npx tsc
+```
+
+---
+
+## Step 2: Add Stats Route to Server
+
+Inside `packages/03-worker-threads/src/worker-pool/server.ts`, add this route before the 404 handler:
+
+```typescript
+if (req.url === "/stats" && req.method === "GET") {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(pool.stats()));
+  return;
+}
+```
+
+Recompile after the change:
+
+```bash
+npx tsc
+```
+
+---
+
+## Step 3: Start the Worker Pool Server
+
+Open **Terminal 1** and run:
+
+```bash
+node dist/packages/03-worker-threads/src/worker-pool/server.js
+```
+
+Expected output:
+```
+server listening on port 3000
+pool stats: { total: 14, free: 14, busy: 0, queued: 0 }
+```
+
+---
+
+## Step 4: Run Benchmarks
+
+Open **Terminal 2** for all benchmark commands below.
+
+### 4a. Worker Pool Benchmark
+
+```bash
+npx autocannon -c 100 -d 10 -p 10 http://localhost:3000/compute
+```
+
+### 4b. Blocking Main Thread Benchmark
+
+```bash
+npx autocannon -c 100 -d 10 -p 10 http://localhost:3000/compute-blocking
+```
+
+### 4c. Stress Test (higher load, longer duration)
+
+```bash
+npx autocannon -c 200 -d 30 -p 10 http://localhost:3000/compute
+```
+
+---
+
+## Step 5: Poll Pool Stats Mid-Benchmark
+
+Open **Terminal 3** while a benchmark is running:
+
+```bash
+curl http://localhost:3000/stats
+```
+
+Expected output under load:
+```json
+{ "total": 14, "free": 0, "busy": 14, "queued": 986 }
+```
+
+`queued` grows when 1000 requests are in flight but only 14 workers are available.
+
+---
+
+## Expected Results Comparison
+
+| Stat | Worker Pool | Blocking Main Thread |
+|---|---|---|
+| Requests / 10s | ~20,000 | ~5,000 |
+| Avg Req/Sec | ~1,876 | ~422 |
+| Avg Latency | ~517ms | ~2,104ms |
+| Median Latency | ~465ms | ~2,367ms |
+| Max Latency | ~919ms | ~2,523ms |
+| Latency Stdev | ~142ms | ~602ms |
+
+---
+
+## Key Takeaways
+
+- Worker pool handles **4.4x more requests** in the same time window
+- Average latency is **4x lower** with the pool
+- Blocking version latency grows linearly with queue depth
+- At 1,000 concurrent requests with 14 workers, 986 requests sit in the queue at any moment
+- The pool's `drain` event fires when all tasks are complete and all workers are free
+- IPC overhead means worker threads are not free: tasks under ~1ms CPU time run faster on the main thread
+
+---
+
+## Autocannon Flag Reference
+
+| Flag | Meaning |
+|---|---|
+| `-c 100` | 100 concurrent connections |
+| `-d 10` | run for 10 seconds |
+| `-p 10` | 10 pipelined requests per connection |
+| `-c 200 -d 30` | stress test: 200 connections for 30 seconds |
+
+---
+
+## npm Script Shortcuts
+
+Add these to `package.json` to avoid typing full paths:
+
+```json
+"workers:pool": "ts-node packages/03-worker-threads/src/worker-pool/test.ts",
+"workers:server": "ts-node packages/03-worker-threads/src/worker-pool/server.ts",
+```
+
+Then run:
+
+```bash
+npm run workers:server
+```
